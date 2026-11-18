@@ -7,8 +7,10 @@ R code, data and figures for an analysis of monthly accommodation demand and tou
 | Item | Description |
 |---|---|
 | `step00_01b_paper_tourism.R` | Complete R code (steps 00–13) |
-| `paper_tourism/` | Data: inputs and outputs of every step (CSV, XLSX) |
+| `paper_tourism/` | Data (16 CSV files) |
 | `paper_tourism/figures/` | Figures 1–4 (PNG and PDF) |
+
+The `paper_tourism/` folder contains the 16 data files needed to reproduce the results: the province × month panel, the geographic matrices, the itinerary networks and the gazetteer.
 
 ## Code flow
 
@@ -39,8 +41,8 @@ R code, data and figures for an analysis of monthly accommodation demand and tou
 ## How to run
 
 1. Set `base_dir` at the top of the R file to the folder that contains `paper_tourism/`.
-2. Run the whole file. A step is skipped when its output files exist, so with the files provided nothing is recomputed. To re-run a step, delete its output files.
-3. Steps 00–02 download data from the web. The tour websites change over time, so keep the `step02b*` files to reproduce the networks used here.
+2. Run the settings and helper sections at the top of the file, then steps 03a–13; they recompute all results from the 16 data files.
+3. Steps 00–02b2 re-collect the data from the web and are not needed. The tour websites change over time, so re-running them would give different networks.
 
 Object and column names are in Turkish (for example `yerli` = domestic, `yabanci` = international, `il` = province); a glossary is given at the top of the R file. All random procedures use fixed seeds.
 
