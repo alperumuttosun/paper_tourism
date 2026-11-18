@@ -1669,7 +1669,7 @@ log_warn("step03d", {
 #   Tables: step04_tables.xlsx (in the project folder)
 #   Version: the version number increases when the code changes -> the same files are overwritten
 # =====================================================================
-f04_ver <- file.path(proj_dir, "step04_version.csv"); s04 <- "v5"
+f04_ver <- file.path(proj_dir, "step04_version.csv"); s04 <- "v7"
 fig_dir <- file.path(proj_dir, "figures")                              # figures subfolder
 log_warn("step04", {
   done04 <- csv_ok(f04_ver) && identical(read_csv_utf8(f04_ver)$surum[1], s04) && file.exists(file.path(proj_dir, "step04_tables.xlsx"))
@@ -1753,7 +1753,8 @@ log_warn("step04", {
       geom_errorbar(aes(xmin = lo, xmax = hi), width = 0.25, orientation = "y", position = position_dodge(width = 0.55)) +  # horizontal error bars (compatible with ggplot2 4.x)
       geom_point(size = 2.2, position = position_dodge(width = 0.55)) +
       scale_colour_manual(values = col_mk, name = NULL) + scale_shape_manual(values = c(Domestic = 16, International = 17), name = NULL) +
-      labs(x = xlab, y = NULL) + theme_minimal(base_size = 10) + theme(legend.position = "bottom", panel.grid.minor = element_blank())
+      labs(x = xlab, y = NULL) + theme_minimal(base_size = 10) + theme(legend.position = "bottom", panel.grid.minor = element_blank(),
+            axis.text.x = element_text(margin = margin(t = 4)), axis.title.x = element_text(margin = margin(t = 14), hjust = 1))  # more space between tick labels and axis title; right-aligned so long titles are not cut off
   }
   durum$Figure2_panel_ladder <- save_fig(ladder_plot(lad[lad$kisim == "panel", ], "Coefficient on lagged itinerary-network term (95% CI)"), "Figure2_panel_ladder", 16, 8.5)
   durum$Figure3_dyadic_ladder <- save_fig(ladder_plot(lad[lad$kisim == "dyad", ], "Coefficient on itinerary intensity in pair co-movement (95% CI)"), "Figure3_dyadic_ladder", 16, 8.5)
