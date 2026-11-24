@@ -13,15 +13,15 @@
 # step02b0: discovery of tour sites: listings + HTML of sample tour pages (SKIPPED if done)
 # step02b1: collection of tour programmes (Jolly, Setur, Tatil Sepeti, TourRadar) (SKIPPED if done)
 # step02b2: place name -> province gazetteer, tour x province list, domestic/international ITINERARY matrices (re-run if the gazetteer version changes)
-# step03a: spillover panel models: geographic W and itinerary W, domestic/international, permutation test (SKIPPED if done)
+# step03a: spillover panel models: geographic W and itinerary W, domestic/international, permutation test (999) (SKIPPED if done)
 # step03b: local shock test: 2023 earthquakes, itinerary vs geographic exposure, event study + 2019 placebo (SKIPPED if done)
 # step03c: dyadic (province pair) design: pair correlations with province effects, 3 permutation types (999), Pesaran CD (SKIPPED if done)
 # step03d: mechanism: itinerary link or destination similarity + permutation (SKIPPED if done)
 # step04: figures in figures/ (PNG 1600 dpi + PDF, 4 figures) and tables (step04_tables.xlsx)
-# step05: robustness: source exclusion, programme bootstrap (200), equal-size subsamples, shared/specific links
+# step05: robustness: source exclusion, programme bootstrap (999), equal-size subsamples (999), shared/specific links
 # step06: dyadic permutation, robust procedures: DSP and Freedman-Lane, t-statistic (999)
 # step07: robustness package: panel lags/monthly/network only, dyadic sensitivity (60 months, raw r, holidays excluded, coast), descriptives
-# step08: pandemic excluded: March 2020-December 2021 left out, panel (199 perm.) and dyadic (DSP 999)
+# step08: pandemic excluded: March 2020-December 2021 left out, panel (999 perm.) and dyadic (DSP 999)
 # step09: lead-lag inference (HC1 + DSP) and deduplication of the international network by province set
 # step10: international monthly lead-lag association, holiday/Easter months excluded (DSP 999)
 # step11: period split: similarity 2017-2019, co-movement after 2022; early/late itinerary coefficient + difference test, late similarity 2023-2024 (DSP 999)
@@ -106,6 +106,12 @@ csv_ok <- function(f) {                                                # CSV exi
   r <- readBin(f, "raw", min(file.info(f)$size, 200000))               # reads raw bytes (NO decoding -> no "invalid input" warning)
   txt <- rawToChar(r[r != as.raw(0) & r < as.raw(128)])                # ASCII bytes only ("<U+" is ASCII)
   !grepl("<U\\+[0-9A-Fa-f]{4}>", txt, useBytes = TRUE)
+}
+n_rep <- 999                                                           # number of replications for EVERY permutation and bootstrap (same throughout the study)
+rep_ok <- function(f, col) {                                           # output exists AND was produced with n_rep replications (otherwise the step is re-run)
+  if (!csv_ok(f)) return(FALSE)
+  x <- tryCatch(read_csv_utf8(f), error = function(e) NULL)
+  !is.null(x) && col %in% names(x) && all(suppressWarnings(as.numeric(x[[col]])) == n_rep, na.rm = TRUE) && any(!is.na(x[[col]]))
 }
 read_csv_utf8 <- function(f) {                                         # reads a UTF-8 CSV with BOM safely
   d <- tryCatch(data.table::fread(f, encoding = "UTF-8", data.table = FALSE),        # Option A
@@ -1260,7 +1266,7 @@ log_warn("step02b2", {
 # =====================================================================
 f03a <- file.path(proj_dir, "step03a_slx_results.csv")
 log_warn("step03a", {
-  if (csv_ok(f03a)) message("step03a zaten yapilmis, atlaniyor.") else {
+  if (csv_ok(f03a) && rep_ok(file.path(proj_dir, "step03a_permutation.csv"), "n_perm")) message("step03a zaten yapilmis, atlaniyor.") else {
   pn <- read_csv_utf8(f01d_panel)
   ik <- sort(unique(pn$il_key)); tt <- sort(unique(pn$t))
   readW <- function(f) { M <- as.matrix(read_csv_utf8(file.path(proj_dir, f))[, -1]); rn <- read_csv_utf8(file.path(proj_dir, f))$il_key
@@ -1332,7 +1338,7 @@ log_warn("step03a", {
         v <- c("knn5", "rota"); d <- d0[complete.cases(d0[, c("y", "ylag", v)]), ]
         fit <- fit_one(d, v, "fe_rota"); t_obs <- coef(fit)[["rota"]] / clus_se(fit, d$il)[["rota"]]
         tp <- numeric(0)
-        for (k in 1:199) {                                             # same network structure, random allocation of which province is linked to which
+        for (k in 1:n_rep) {                                           # same network structure, random allocation of which province is linked to which
           pm <- seq_along(ik); pm[mem] <- sample(mem)
           Wp <- Wr[pm, pm]; dimnames(Wp) <- dimnames(Wr)
           dp <- d0; dp$rota <- wlag(Wp, y); dp <- dp[complete.cases(dp[, c("y", "ylag", v)]), ]
@@ -1525,8 +1531,8 @@ log_warn("step03c", {
       b_obs <- fitb(z, Xm)
       Xl <- cbind(rota = rb, komsu = kc, log_uzaklik = ld, z_es = z)   # lagged: residual of j one month earlier, controlling for the contemporaneous correlation
       zl <- atanh(pmax(pmin(pl$r, 0.999), -0.999)); b_lag <- fitb(zl, Xl)
-      bq_mem <- bq_all <- br <- numeric(999)
-      for (k in 1:999) {
+      bq_mem <- bq_all <- br <- numeric(n_rep)
+      for (k in 1:n_rep) {
         pm <- seq_len(n); pm[mem] <- sample(mem); P <- Cm[pm, pm]; Xp <- Xm; Xp[, 1] <- as.numeric(P[up] > 0); bq_mem[k] <- fitb(z, Xp)
         pa <- sample.int(n); P <- Cm[pa, pa]; Xp[, 1] <- as.numeric(P[up] > 0); bq_all[k] <- fitb(z, Xp)
         P <- rewire((Cm > 0) * 1, nswap = 10 * sum(Cm[up] > 0)); Xp[, 1] <- as.numeric(P[up] > 0); br[k] <- fitb(z, Xp)
@@ -1535,7 +1541,7 @@ log_warn("step03c", {
       permd[[length(permd) + 1]] <- data.frame(pazar = mk, sonuc = sonuc, model = "D2_rota_cografi", b_rota = round(b_obs, 4),
         p_qap_ag_ici = pv(b_obs, bq_mem), p_qap_tum = pv(b_obs, bq_all), p_yeniden_baglama = pv(b_obs, br),
         perm_ort_ag_ici = round(mean(bq_mem), 4), perm_95_ag_ici = round(quantile(bq_mem, 0.95), 4),
-        b_rota_gecikmeli = round(b_lag, 4), n_perm = 999, stringsAsFactors = FALSE)
+        b_rota_gecikmeli = round(b_lag, 4), n_perm = n_rep, stringsAsFactors = FALSE)
       cdl[[length(cdl) + 1]] <- data.frame(pazar = mk, sonuc = sonuc, cd_il_ay = round(cd_test(E), 2),
         ort_rho = round(mean(pc$r, na.rm = TRUE), 4), ort_rho_rota_bagli = round(mean(pc$r[rb == 1], na.rm = TRUE), 4),
         ort_rho_bagsiz_ag_ici = round(mean(pc$r[rb == 0 & both_mem == 1], na.rm = TRUE), 4),
@@ -1633,15 +1639,15 @@ log_warn("step03d", {
           tahmin = round(coef(fit)[[tm]], 4), se_hc1 = round(se[[tm]], 4), t = round(coef(fit)[[tm]] / se[[tm]], 2), n_cift = sum(ok), stringsAsFactors = FALSE)
       }
       for (sn in c("M0_rota", "M4_tum_benzerlik")) {                   # permutation: itinerary intensity coefficient
-        X <- specs[[sn]]; b_obs <- fitb(z, X); bq_mem <- bq_all <- br <- numeric(999)
-        for (k in 1:999) {
+        X <- specs[[sn]]; b_obs <- fitb(z, X); bq_mem <- bq_all <- br <- numeric(n_rep)
+        for (k in 1:n_rep) {
           pm <- seq_len(n); pm[mem] <- sample(mem); Xp <- X; Xp[, 1] <- log1p(Cm[pm, pm][up]); bq_mem[k] <- fitb(z, Xp)
           pa <- sample.int(n); Xp[, 1] <- log1p(Cm[pa, pa][up]); bq_all[k] <- fitb(z, Xp)
           Xp[, 1] <- log1p(rewire(Cm, 10 * sum(Cm[up] > 0))[up]); br[k] <- fitb(z, Xp)
         }
         pv <- function(b, bp) round((1 + sum(bp >= b)) / (1 + length(bp)), 4)
         permd[[length(permd) + 1]] <- data.frame(pazar = mk, sonuc = sonuc, model = sn, b_rota_log1p = round(b_obs, 4),
-          p_qap_ag_ici = pv(b_obs, bq_mem), p_qap_tum = pv(b_obs, bq_all), p_yeniden_baglama = pv(b_obs, br), n_perm = 999, stringsAsFactors = FALSE)
+          p_qap_ag_ici = pv(b_obs, bq_mem), p_qap_tum = pv(b_obs, bq_all), p_yeniden_baglama = pv(b_obs, br), n_perm = n_rep, stringsAsFactors = FALSE)
         cat("  bitti:", mk, oc, sn, "| b =", round(b_obs, 4), "| p ag ici =", tail(permd, 1)[[1]]$p_qap_ag_ici, "\n")
       }
     }
@@ -1669,7 +1675,7 @@ log_warn("step03d", {
 #   Tables: step04_tables.xlsx (in the project folder)
 #   Version: the version number increases when the code changes -> the same files are overwritten
 # =====================================================================
-f04_ver <- file.path(proj_dir, "step04_version.csv"); s04 <- "v7"
+f04_ver <- file.path(proj_dir, "step04_version.csv"); s04 <- "v8"
 fig_dir <- file.path(proj_dir, "figures")                              # figures subfolder
 log_warn("step04", {
   done04 <- csv_ok(f04_ver) && identical(read_csv_utf8(f04_ver)$surum[1], s04) && file.exists(file.path(proj_dir, "step04_tables.xlsx"))
@@ -1783,7 +1789,7 @@ log_warn("step04", {
             `Fixed effects` = ifelse(x$sabit_etki == "il_ay", "Province + month", "Province + month + network x month"), Model = x$model,
             Term = tterm[x$terim], `Estimate (SE)` = fmt(x$tahmin, x$se), p = x$p, N = x$n, check.names = FALSE, stringsAsFactors = FALSE) }
   T2 <- mkT2(r3a$terim != "ylag" & grepl("geceleme", r3a$sonuc) & r3a$model %in% c("M1_cografi", "M2_rota", "M3_ikisi", "M6_plasebo_diger_rota"))
-  T2perm <- data.frame(Market = mk_en[p3a$pazar], `Observed t` = p3a$t_gozlenen, `Permutation p (199)` = p3a$perm_p_tek_yonlu, check.names = FALSE)
+  T2perm <- data.frame(Market = mk_en[p3a$pazar], `Observed t` = p3a$t_gozlenen, `Permutation p (999)` = p3a$perm_p_tek_yonlu, check.names = FALSE)
   qterm <- c(rota_maruz_x_sonra = "Itinerary exposure x post", knn5_maruz_x_sonra = "Geographic (kNN-5) exposure x post", komsu_maruz_x_sonra = "Contiguity exposure x post")
   x <- r3b[r3b$model %in% c("ikisi", "ikisi_komsu"), ]
   T3 <- data.frame(Event = ifelse(x$deneme == "gercek", "February 2023 earthquake", "Placebo: February 2019"), Market = mk_en[x$pazar],
@@ -1828,7 +1834,7 @@ log_warn("step04", {
 # =====================================================================
 f05 <- file.path(proj_dir, "step05_dyadic_robustness.csv")
 log_warn("step05", {
-  if (csv_ok(f05)) message("step05 zaten yapilmis, atlaniyor.") else {
+  if (csv_ok(f05) && rep_ok(file.path(proj_dir, "step05_bootstrap_summary.csv"), "n_tekrar")) message("step05 zaten yapilmis, atlaniyor.") else {
   pn <- read_csv_utf8(f01d_panel)
   ik <- sort(unique(pn$il_key)); n <- length(ik); tt <- sort(unique(pn$t))
   tl <- read_csv_utf8(file.path(proj_dir, "step02b2_tour_provinces.csv"))
@@ -1898,19 +1904,19 @@ log_warn("step05", {
   progs <- lapply(progs, function(x) x[!duplicated(x$program), ])
   n_eq <- min(vapply(progs, nrow, integer(1)))                         # equal size: number of programmes of the smaller market
   bs <- list(); eq <- list()
-  for (k in 1:200) {
+  for (k in 1:n_rep) {
     Cb <- lapply(progs, function(x) { xb <- x[sample.int(nrow(x), replace = TRUE), ]; xb$program <- paste(xb$program, seq_len(nrow(xb))); build_C(xb) })  # programme bootstrap
     for (mk in c("yerli", "yabanci")) { b <- coef_rota(Cb[[mk]], mk); bs[[length(bs) + 1]] <- data.frame(tekrar = k, pazar = mk, b_M0 = b[["M0"]], b_M4 = b[["M4"]]) }
     Ce <- lapply(progs, function(x) build_C(x[sample.int(nrow(x), n_eq), ]))  # equal-size subsamples
     for (mk in c("yerli", "yabanci")) eq[[length(eq) + 1]] <- data.frame(tekrar = k, pazar = mk, t(net_stats(Ce[[mk]], Ce[[setdiff(c("yerli", "yabanci"), mk)]])))
-    if (k %% 50 == 0) cat("  bootstrap:", k, "/ 200\n")
+    if (k %% 100 == 0) cat("  bootstrap:", k, "/", n_rep, "\n")
   }
   bs <- do.call(rbind, bs); eq <- do.call(rbind, eq)
   bsum <- do.call(rbind, lapply(split(bs, bs$pazar), function(d) data.frame(pazar = d$pazar[1],
     M0_ort = round(mean(d$b_M0), 4), M0_ci_alt = round(quantile(d$b_M0, 0.025), 4), M0_ci_ust = round(quantile(d$b_M0, 0.975), 4),
     M4_ort = round(mean(d$b_M4), 4), M4_ci_alt = round(quantile(d$b_M4, 0.025), 4), M4_ci_ust = round(quantile(d$b_M4, 0.975), 4),
-    pay_M4_pozitif = round(mean(d$b_M4 > 0), 3), azalma_ort_yuzde = round(100 * mean(1 - d$b_M4 / d$b_M0), 1))))
-  esum <- do.call(rbind, lapply(split(eq, eq$pazar), function(d) data.frame(pazar = d$pazar[1], n_program = n_eq,
+    pay_M4_pozitif = round(mean(d$b_M4 > 0), 3), azalma_ort_yuzde = round(100 * mean(1 - d$b_M4 / d$b_M0), 1), n_tekrar = nrow(d))))
+  esum <- do.call(rbind, lapply(split(eq, eq$pazar), function(d) data.frame(pazar = d$pazar[1], n_program = n_eq, n_tekrar = nrow(d),
     pay_komsu_olmayan = round(mean(d$pay_komsu_olmayan), 3), medyan_km = round(mean(d$medyan_km), 1), jaccard = round(mean(d$jaccard_diger_pazar), 3),
     gini_guc = round(mean(d$gini_guc), 3), denizli_nevsehir_ort = round(mean(d$denizli_nevsehir), 1),
     denizli_nevsehir_ci = paste(quantile(d$denizli_nevsehir, c(0.025, 0.975)), collapse = " - "))))
@@ -1987,7 +1993,7 @@ log_warn("step06", {
   t_lm <- function(z, X, Z) { f <- lm.fit(cbind(X, Z), z); e <- f$residuals; df <- length(z) - f$rank   # Option B: direct lm.fit
     XtX <- crossprod(cbind(X, Z)); v <- tryCatch(solve(XtX)[1, 1], error = function(e) NA); f$coefficients[1] / sqrt(sum(e^2) / df * v) }
   set.seed(20261113)                                                    # reproducible permutations
-  R <- 999; res <- list()
+  R <- n_rep; res <- list()
   for (mk in c("yerli", "yabanci")) {
     Cm <- C[[mk]]; mem <- which(rowSums(Cm) > 0)                        # provinces on the itinerary network
     P <- prof(paste0("geceleme_", mk)); mevs <- cor(t(P)); mevs[!is.finite(mevs)] <- 0  # seasonality similarity
@@ -2050,7 +2056,7 @@ log_warn("step06", {
 # step07: ROBUSTNESS PACKAGE
 #   (a) Panel timing: year-on-year growth with lags of 1 / 3 / 6 / 12 months (12 = non-overlapping window),
 #       month-on-month growth (province x calendar month + month effects), provinces on the itinerary network only
-#       -> each without / with network x month effects; permutation test (199) for the network x month version
+#       -> each without / with network x month effects; permutation test (999) for the network x month version
 #   (b) Dyadic sensitivity (M0 and M4, DSP permutation 999):
 #       at least 60 common months, raw correlation instead of Fisher z, holiday/Easter months excluded for monthly growth,
 #       coastal coding: both provinces coastal + only one province coastal
@@ -2060,7 +2066,7 @@ log_warn("step06", {
 # =====================================================================
 f07 <- file.path(proj_dir, "step07_dyadic_sensitivity.csv")
 log_warn("step07", {
-  if (csv_ok(f07)) message("step07 zaten yapilmis, atlaniyor.") else {
+  if (csv_ok(f07) && rep_ok(file.path(proj_dir, "step07_panel_timing.csv"), "n_perm")) message("step07 zaten yapilmis, atlaniyor.") else {
   pn <- read_csv_utf8(f01d_panel)                                       # analysis panel
   ik <- sort(unique(pn$il_key)); n <- length(ik); tt <- sort(unique(pn$t))  # provinces and months
   readM <- function(f) { x <- read_csv_utf8(file.path(proj_dir, f)); M <- as.matrix(x[, -1]); dimnames(M) <- list(x$il_key, x$il_key); M[ik, ik] }
@@ -2115,7 +2121,7 @@ log_warn("step07", {
           t_fwl <- function(rv) { r1 <- qr.resid(qz, rv); bb <- sum(r1 * ey) / sum(r1^2); e <- ey - bb * r1   # FWL: itinerary coefficient and
             sc <- rowsum(r1 * e, as.character(d$il)); v <- sum(sc^2) / sum(r1^2)^2 * G / (G - 1) * (N - 1) / (N - K); bb / sqrt(v) }  # province-clustered t (fast)
           t_obs <- t_fwl(d$rota); tp <- numeric(0)
-          for (r in 1:199) {
+          for (r in 1:n_rep) {
             pm <- seq_len(n); pm[mem] <- sample(mem); Wp <- Wr[pm, pm]; dimnames(Wp) <- dimnames(Wr)
             rp <- wlag_k(Wp, y, sp$k)[if (sp$sadece_ag) uye[[mk]][ii] else TRUE][match(rownames(d), rownames(d0))]  # same rows
             tp <- c(tp, if (all(is.finite(rp))) t_fwl(rp) else NA)
@@ -2124,7 +2130,7 @@ log_warn("step07", {
         }
         pres[[length(pres) + 1]] <- data.frame(pazar = mk, model = sn, sabit_etki = fe_mode, gecikme_ay = sp$k,
           b_rota = round(b, 4), se_rota = round(s, 4), p_rota = signif(2 * pt(-abs(b / s), df = length(unique(d$il)) - 1), 3),
-          b_knn5 = round(coef(fit)[["knn5"]], 4), se_knn5 = round(se[["knn5"]], 4), p_perm_199 = p_perm,
+          b_knn5 = round(coef(fit)[["knn5"]], 4), se_knn5 = round(se[["knn5"]], 4), p_perm = p_perm, n_perm = if (is.na(p_perm)) NA_integer_ else n_rep,
           n = nrow(d), n_il = length(unique(d$il)), stringsAsFactors = FALSE)
         cat("  step07 panel:", mk, sn, fe_mode, "| b =", round(b, 4), "\n")
       }
@@ -2157,7 +2163,7 @@ log_warn("step07", {
     paskalya = as.Date(c("2017-04-16", "2018-04-01", "2019-04-21", "2020-04-12", "2021-04-04", "2022-04-17", "2023-04-09", "2024-03-31", "2025-04-20", "2026-04-05")))
   hol_t <- function(dd, span) { s <- unique(c(as.numeric(format(dd, "%Y")) * 12 + as.numeric(format(dd, "%m")),
                                               as.numeric(format(dd + span, "%Y")) * 12 + as.numeric(format(dd + span, "%m")))); unique(c(s, s + 1)) }  # holiday month and the following month (monthly growth)
-  dsp_test <- function(z, x, Z, mem, R = 999) {                         # DSP permutation (same as step06)
+  dsp_test <- function(z, x, Z, mem, R = n_rep) {                         # DSP permutation (same as step06)
     ok <- is.finite(z) & is.finite(x) & rowSums(!is.finite(Z)) == 0
     qz <- qr(Z[ok, , drop = FALSE]); df <- sum(ok) - qz$rank - 1
     rx <- qr.resid(qz, x[ok]); ez <- qr.resid(qz, z[ok])
@@ -2235,7 +2241,7 @@ log_warn("step07", {
   okx <- tryCatch({ openxlsx::write.xlsx(sh, fx, overwrite = TRUE); TRUE }, error = function(e) FALSE)   # Option A
   if (!okx) okx <- tryCatch({ writexl::write_xlsx(sh, fx); TRUE }, error = function(e) FALSE)           # Option B (CSVs already written)
   cat("step07 -> panel zamanlamasi ve ikili duyarlilik:\n")
-  print(pres[, c("pazar", "model", "sabit_etki", "b_rota", "se_rota", "p_rota", "p_perm_199", "n")], row.names = FALSE)
+  print(pres[, c("pazar", "model", "sabit_etki", "b_rota", "se_rota", "p_rota", "p_perm", "n")], row.names = FALSE)
   print(dres, row.names = FALSE); print(diagn[diagn$olcu != "panel_yillik_kullanilan_aylar", ], row.names = FALSE)
   }
 })
@@ -2245,13 +2251,13 @@ log_warn("step07", {
 #   Pandemic window: March 2020 - December 2021
 #   Year-on-year growth: observations with month t OR month t-12 in the window are excluded (i.e. March 2020 - December 2022)
 #   Month-on-month growth: observations with month t in the window are excluded
-#   (a) Panel: year-on-year growth, 1-month lag, province+month and province+month+network x month; permutation (199) for the network x month version
+#   (a) Panel: year-on-year growth, 1-month lag, province+month and province+month+network x month; permutation (999) for the network x month version
 #   (b) Dyadic: year-on-year and month-on-month growth, M0 (itinerary + geography) and M4 (+ 4 similarity measures), DSP permutation (999)
 #   Outputs: step08_pandemic.csv, step08_pandemic.xlsx
 # =====================================================================
 f08 <- file.path(proj_dir, "step08_pandemic.csv")
 log_warn("step08", {
-  if (csv_ok(f08)) message("step08 zaten yapilmis, atlaniyor.") else {
+  if (rep_ok(f08, "n_perm")) message("step08 zaten yapilmis, atlaniyor.") else {
   pn <- read_csv_utf8(f01d_panel)                                       # analysis panel
   ik <- sort(unique(pn$il_key)); n <- length(ik); tt <- sort(unique(pn$t))  # provinces and months (t = year*12 + month)
   readM <- function(f) { x <- read_csv_utf8(file.path(proj_dir, f)); M <- as.matrix(x[, -1]); dimnames(M) <- list(x$il_key, x$il_key); M[ik, ik] }  # reads a matrix
@@ -2297,8 +2303,8 @@ log_warn("step08", {
         qz <- qr(mm); ey <- qr.resid(qz, d$y); K <- qz$rank + 1; G <- length(unique(d$il)); N <- nrow(d)
         t_fwl <- function(rv) { r1 <- qr.resid(qz, rv); bb <- sum(r1 * ey) / sum(r1^2); e <- ey - bb * r1   # FWL coefficient
           sc <- rowsum(r1 * e, as.character(d$il)); v <- sum(sc^2) / sum(r1^2)^2 * G / (G - 1) * (N - 1) / (N - K); bb / sqrt(v) }  # province-clustered t
-        t_obs <- t_fwl(d$rota); tp <- rep(NA_real_, 199)
-        for (r in 1:199) {
+        t_obs <- t_fwl(d$rota); tp <- rep(NA_real_, n_rep)
+        for (r in 1:n_rep) {
           pm <- seq_len(n); pm[mem] <- sample(mem); Wp <- Wr[pm, pm]; dimnames(Wp) <- dimnames(Wr)  # labels are shuffled
           rp <- wlag_k(Wp, y, 1)[as.integer(rownames(d))]                 # same sample rows
           if (all(is.finite(rp))) tp[r] <- t_fwl(rp)
@@ -2306,7 +2312,7 @@ log_warn("step08", {
         p_perm <- round((1 + sum(tp >= t_obs, na.rm = TRUE)) / (1 + sum(is.finite(tp))), 3)  # one-sided p
       }
       out[[length(out) + 1]] <- data.frame(tasarim = "panel", pazar = mk, buyume = "yillik", model = fe_mode,
-        b = round(b, 4), se = round(s, 4), p_perm = p_perm, p_dsp_ag_ici = NA, p_dsp_tum = NA,
+        b = round(b, 4), se = round(s, 4), p_perm = p_perm, n_perm = if (is.na(p_perm)) NA_integer_ else n_rep, p_dsp_ag_ici = NA, p_dsp_tum = NA,
         n_gozlem = nrow(d), n_ay = length(unique(d$ay)), stringsAsFactors = FALSE)
       cat("  step08 panel:", mk, fe_mode, "| b =", round(b, 4), "| se =", round(s, 4), "| p_perm =", p_perm, "\n")
     }
@@ -2333,7 +2339,7 @@ log_warn("step08", {
     for (p in seq_len(nrow(up))) { a <- E[up[p, 1], ]; b <- E[up[p, 2], ]; ok <- is.finite(a) & is.finite(b); na[p] <- sum(ok)
       zz[p] <- if (sum(ok) < min_ay) NA_real_ else atanh(max(min(cor(a[ok], b[ok]), 0.999), -0.999)) }
     list(z = zz, n_ay = na) }
-  dsp_test <- function(z, x, Z, mem, R = 999) {                         # DSP permutation (same as step06/step07)
+  dsp_test <- function(z, x, Z, mem, R = n_rep) {                         # DSP permutation (same as step06/step07)
     ok <- is.finite(z) & is.finite(x) & rowSums(!is.finite(Z)) == 0
     qz <- qr(Z[ok, , drop = FALSE]); df <- sum(ok) - qz$rank - 1
     rx <- qr.resid(qz, x[ok]); ez <- qr.resid(qz, z[ok])                # x and z are purged of the controls + province effects
@@ -2362,7 +2368,7 @@ log_warn("step08", {
         Z <- cbind(geo, if (sn == "M4_tum_benzerlik") sim else NULL, Xfe)
         r <- dsp_test(ps$z, x, Z, mem)
         out[[length(out) + 1]] <- data.frame(tasarim = "ikili", pazar = mk, buyume = vn, model = sn,
-          b = round(r[["b"]], 4), se = round(r[["se"]], 4), p_perm = NA, p_dsp_ag_ici = round(r[["p1"]], 3), p_dsp_tum = round(r[["p2"]], 3),
+          b = round(r[["b"]], 4), se = round(r[["se"]], 4), p_perm = NA, n_perm = n_rep, p_dsp_ag_ici = round(r[["p1"]], 3), p_dsp_tum = round(r[["p2"]], 3),
           n_gozlem = r[["n_cift"]], n_ay = median(ps$n_ay), stringsAsFactors = FALSE)
         cat("  step08 ikili:", mk, vn, sn, "| b =", round(r[["b"]], 4), "| p_dsp =", round(r[["p1"]], 3), "/", round(r[["p2"]], 3), "\n")
       }
@@ -2420,7 +2426,7 @@ log_warn("step09", {
       X1 <- model.matrix(fit); X1 <- X1[, !is.na(coef(fit)), drop = FALSE]; e <- resid(fit); XtXi <- solve(crossprod(X1))      # Option B: manual HC1
       V <- XtXi %*% crossprod(X1 * e) %*% XtXi * nrow(X1) / (nrow(X1) - ncol(X1)); sqrt(diag(V))[[term]] }
     c(b = unname(coef(fit)[[term]]), se = unname(se)) }
-  dsp_test <- function(z, x, Z, mem, R = 999) {                         # DSP permutation (same as step06-08)
+  dsp_test <- function(z, x, Z, mem, R = n_rep) {                         # DSP permutation (same as step06-08)
     ok <- is.finite(z) & is.finite(x) & rowSums(!is.finite(Z)) == 0
     qz <- qr(Z[ok, , drop = FALSE]); df <- sum(ok) - qz$rank - 1
     rx <- qr.resid(qz, x[ok]); ez <- qr.resid(qz, z[ok])                # x and z are purged of the controls + province effects
@@ -2554,7 +2560,7 @@ log_warn("step10", {
       X1 <- model.matrix(f); X1 <- X1[, !is.na(coef(f)), drop = FALSE]; e <- resid(f); XtXi <- solve(crossprod(X1))       # Option B: manual HC1
       V <- XtXi %*% crossprod(X1 * e) %*% XtXi * nrow(X1) / (nrow(X1) - ncol(X1)); sqrt(diag(V))[["x"]] }
     c(b = unname(coef(f)[["x"]]), se = unname(se)) }
-  dsp_test <- function(z, x, Z, R = 999) {                              # DSP permutation (same as step06-09)
+  dsp_test <- function(z, x, Z, R = n_rep) {                              # DSP permutation (same as step06-09)
     okk <- is.finite(z) & is.finite(x) & rowSums(!is.finite(Z)) == 0
     qz <- qr(Z[okk, , drop = FALSE]); df <- sum(okk) - qz$rank - 1
     rx <- qr.resid(qz, x[okk]); ez <- qr.resid(qz, z[okk])
@@ -2638,7 +2644,7 @@ log_warn("step11", {
       X1 <- model.matrix(f); X1 <- X1[, !is.na(coef(f)), drop = FALSE]; e <- resid(f); XtXi <- solve(crossprod(X1))       # Option B: manual HC1
       V <- XtXi %*% crossprod(X1 * e) %*% XtXi * nrow(X1) / (nrow(X1) - ncol(X1)); sqrt(diag(V))[["x"]] }
     c(b = unname(coef(f)[["x"]]), se = unname(se)) }
-  dsp_test <- function(z, x, Z, mem, R = 999) {                         # DSP permutation (same as step06-10), both tails
+  dsp_test <- function(z, x, Z, mem, R = n_rep) {                         # DSP permutation (same as step06-10), both tails
     okk <- is.finite(z) & is.finite(x) & rowSums(!is.finite(Z)) == 0
     qz <- qr(Z[okk, , drop = FALSE]); df <- sum(okk) - qz$rank - 1
     rx <- qr.resid(qz, x[okk]); ez <- qr.resid(qz, z[okk])              # x and z are purged of the controls + province effects
@@ -2742,7 +2748,7 @@ log_warn("step12", {
     if (!is.finite(b)) b <- tryCatch(qr.coef(qr(X), z)[1], error = function(e) NA_real_)  # Option B: QR solution
     unname(b) }
   set.seed(20261119)                                                    # reproducible bootstrap
-  R <- 999
+  R <- n_rep
   out <- list()
   for (mk in c("yerli", "yabanci")) {
     x <- log1p(C[[mk]][up])                                              # itinerary intensity ln(1 + c)
